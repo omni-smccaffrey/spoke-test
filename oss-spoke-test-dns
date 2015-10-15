@@ -1,0 +1,200 @@
+{
+	"AWSTemplateFormatVersion" : "2010-09-09",
+
+	"Description" : "ROLL-XXXX OSS Stack based on ami-01a1bb75",
+
+	"Parameters" : {		
+		"AWSACCOUNT": {
+			"Description": "The AWS Account to associate with",
+			"Type": "String",
+			"AllowedValues": [
+			                  "awseng",
+			                  "awscore"],
+			                  "ConstraintDescription": "must be one of the following standard sub-accounts e.g. awseng or awscore."
+		},
+		"JIRA" :
+		{
+			"Description" : "The JIRA reference (normally ROLL)",
+			"Type" : "String"
+		},
+		"OfficeCIDR" : {
+			"Description" : "The Office CIDR",
+			"Type" : "String",
+			"Default" : "217.156.157.0/24"
+		},
+		"UK3CIDR" : {
+			"Description" : "The UK3 CIDR",
+			"Type" : "String",
+			"Default" : "195.54.58.0/23"
+		},
+		"US1CIDR" : {
+			"Description" : "The US1 CIDR",
+			"Type" : "String",
+			"Default" : "198.231.6.0/23"
+		},
+		"LaunchedBy" :
+		{
+			"Description" : "The userid of the person who launched this stack",
+			"Type" : "String"
+		},
+		"VPCID" :
+		{
+			"Description": "The VPC ID to associate with. Default: AWSENG: vpc-cf8882ad (10.111.0.0/16)",
+			"Type": "List<AWS::EC2::VPC::Id>",
+			"Default" : "vpc-cf8882ad"
+		},
+		"VpcSubnetId1" :
+		{
+			"Description": "The VPC subnet ID #1 to launch instance in",
+			"Type": "List<AWS::EC2::Subnet::Id>"
+		},
+		"OSSAMI" : { 
+			"Description" : "The AMI of the OSS spoke server",
+			"Type" : "String",
+			"Default" : "ami-01a1bb75"
+		},
+		"KeyName": {
+          "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+          "Type": "AWS::EC2::KeyPair::KeyName",
+          "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+        },
+		"InstanceType" : {
+          "Description" : "Spoke Server EC2 instance type",
+          "Type" : "String",
+          "Default" : "t2.micro",
+          "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium", "m1.small", "m1.medium", "m1.large", "c4.large"],
+          "ConstraintDescription" : "must be a valid EC2 instance type."
+        },
+		
+		"SSHLocation" : {
+          "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "Default": "0.0.0.0/0",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+        },
+		"HostName" : {
+		  "Type" : "String",
+		  "Description" : "The hostname of this instance",
+		  "Default" : "OSS-Spoke"
+		},
+		"HostedZone" : {
+          "Type" : "String",
+          "Description" : "The DNS name of an existing Amazon Route 53 hosted zone or domain name",
+		  "AllowedValues" : [ "eng-aws.ribob03.net", "core-aws.ribob03.net"]
+        }
+	},
+	
+    "Mappings": {
+	    
+		"awseng": {
+		    "us-east-1": {
+				"sshkey": "ec2-user-key"
+			},
+			"eu-west-1": {
+				"sshkey": "ec2-user-key"
+			}
+		},
+		"awscore": {
+			"us-east-1": {
+				"sshkey": "ec2-user-key"
+			},
+			"eu-west-1": {
+			    "sshkey": "ec2-user-key"
+			}
+		},
+		
+		"AWSInstanceType2Arch" : {
+        "t1.micro"    : { "Arch" : "PV64"   },
+        "t2.micro"    : { "Arch" : "HVM64"  },
+        "t2.small"    : { "Arch" : "HVM64"  },
+        "t2.medium"   : { "Arch" : "HVM64"  },
+        "m1.small"    : { "Arch" : "PV64"   },
+        "m1.medium"   : { "Arch" : "PV64"   },
+        "m1.large"    : { "Arch" : "PV64"   },
+        "m1.xlarge"   : { "Arch" : "PV64"   },
+        "m2.xlarge"   : { "Arch" : "PV64"   }
+	    },
+		
+	    "AWSRegionArch2AMI" : {
+        "us-east-1"        : {"PV64" : "ami-01a1bb75", "HVM64" : "ami-01a1bb75", "HVMG2" : "ami-01a1bb75"},
+        "us-west-2"        : {"PV64" : "ami-01a1bb75", "HVM64" : "ami-01a1bb75", "HVMG2" : "ami-01a1bb75"},
+        "us-west-1"        : {"PV64" : "ami-01a1bb75", "HVM64" : "ami-01a1bb75", "HVMG2" : "ami-01a1bb75"},
+        "eu-west-1"        : {"PV64" : "ami-d6d18ea1", "HVM64" : "ami-e4d18e93", "HVMG2" : "ami-72a9f105"},
+        "eu-central-1"     : {"PV64" : "ami-01a1bb75", "HVM64" : "ami-01a1bb75", "HVMG2" : "ami-01a1bb75"}
+	    }
+	},
+	
+	"Resources" : {	
+	    "EC2Instance" : {
+          "Type" : "AWS::EC2::Instance",
+          "Properties" : {
+            "InstanceType" : { "Ref" : "InstanceType" },
+            "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+            "KeyName" : { "Ref" : "KeyName" },
+            "ImageId" : { "Fn::FindInMap" : [ "AWSRegionArch2AMI", { "Ref" : "AWS::Region" },
+                          { "Fn::FindInMap" : [ "AWSInstanceType2Arch", { "Ref" : "InstanceType" }, "Arch" ] } ] }
+            }
+		},
+		"InstanceSecurityGroup" : {
+          "Type" : "AWS::EC2::SecurityGroup",
+          "Properties" : {
+            "GroupDescription" : "Enable SSH access via port 22",
+            "SecurityGroupIngress" : [ {
+              "IpProtocol" : "tcp",
+              "FromPort" : "22",
+              "ToPort" : "22",
+              "CidrIp" : { "Ref" : "SSHLocation"}
+            } ]
+          }
+        },
+		"PrivateDNSRecord" : {
+          "Type" : "AWS::Route53::RecordSet",
+          "Properties" : {
+            "HostedZoneName" : { "Fn::Join" : [ "", [{"Ref" : "HostedZone"}, "." ]]},
+            "Comment" : "Private fixed DNS name for this instance.",
+            "Name" : { "Fn::Join" : [ "", [{"Ref" : "HostName"}, ".", {"Ref" : "AWS::Region"}, ".", {"Ref" : "HostedZone"} ,"."]]},
+            "Type" : "A",
+            "TTL" : "900",
+            "ResourceRecords" : [ { "Fn::GetAtt" : [ "EC2Instance", "PrivateIp" ] } ]
+          }
+        }
+	},
+	
+	"Outputs" : {
+		"InstanceId" : {
+          "Description" : "InstanceId of the newly created EC2 instance",
+          "Value" : { "Ref" : "EC2Instance" }
+         },
+		"ImageID" : {
+            "Description" : "InstanceId of the newly created EC2 instance",
+            "Value" : { "Ref" : "OSSAMI" }
+        },
+        "AZ" : {
+            "Description" : "Availability Zone of the newly created EC2 instance",
+            "Value" : { "Fn::GetAtt" : [ "EC2Instance", "AvailabilityZone" ] }
+        },
+		"PublicDNS" : {
+            "Description" : "Public DNS name of the newly created EC2 instance",
+            "Value" : { "Fn::GetAtt" : [ "EC2Instance", "PublicDnsName" ] }
+        },
+        "PublicIP" : {
+            "Description" : "Public IP address of the newly created EC2 instance",
+            "Value" : { "Fn::GetAtt" : [ "EC2Instance", "PublicIp" ] }
+        },
+		"AWSassignedPrivateDNS" : {
+            "Description" : "Private DNS name of the newly created EC2 instance",
+            "Value" : { "Fn::GetAtt" : [ "EC2Instance", "PrivateDnsName" ] }
+        },
+		"fixedInternalPrivateDNS" : {
+            "Description" : "Private DNS name of the newly created EC2 instance",
+            "Value" : { "Ref" : "PrivateDNSRecord" }
+        },
+		"PrivateIP" : {
+            "Description" : "Private IP address of the newly created EC2 instance",
+            "Value" : { "Fn::GetAtt" : [ "EC2Instance", "PrivateIp" ] }
+        }
+    }
+}
